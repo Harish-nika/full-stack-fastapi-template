@@ -10,7 +10,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "80:80"
+      - "8088:80"
       - "8090:8080"
     # Duplicate the command from docker-compose.yml to add --api.insecure=true
     command:
@@ -51,17 +51,24 @@ services:
       - "5432:5432"
 
   adminer:
+    labels:
+      - traefik.http.routers.full-stack-fastapi-project-adminer-https.rule=
+      - traefik.http.routers.full-stack-fastapi-project-adminer-https.entrypoints=
+      - traefik.http.routers.full-stack-fastapi-project-adminer-https.tls=
+      - traefik.http.routers.full-stack-fastapi-project-adminer-https.tls.certresolver=
     restart: "no"
     ports:
-      - "8080:8080"
+      - "8081:8080"
 
   backend:
+    labels:
+      - traefik.http.routers.full-stack-fastapi-project-backend-https.rule=
+      - traefik.http.routers.full-stack-fastapi-project-backend-https.entrypoints=
+      - traefik.http.routers.full-stack-fastapi-project-backend-https.tls=
+      - traefik.http.routers.full-stack-fastapi-project-backend-https.tls.certresolver=
     restart: "no"
-    ports:
-      - "8000:8000"
     build:
       context: ./backend
-    # command: sleep infinity  # Infinite loop to keep container alive doing nothing
     command:
       - fastapi
       - run
@@ -84,7 +91,7 @@ services:
       SMTP_HOST: "mailcatcher"
       SMTP_PORT: "1025"
       SMTP_TLS: "false"
-      EMAILS_FROM_EMAIL: "noreply@example.com"
+      EMAILS_FROM_EMAIL: "harish.kumar@factentry.com"
 
   mailcatcher:
     image: schickling/mailcatcher
@@ -93,20 +100,30 @@ services:
       - "1025:1025"
 
   frontend:
+    labels:
+      - traefik.http.routers.full-stack-fastapi-project-frontend-https.rule=
+      - traefik.http.routers.full-stack-fastapi-project-frontend-https.entrypoints=
+      - traefik.http.routers.full-stack-fastapi-project-frontend-https.tls=
+      - traefik.http.routers.full-stack-fastapi-project-frontend-https.tls.certresolver=
     restart: "no"
     ports:
       - "5173:80"
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=http://localhost:8000
+        #  IMPORTANT CHANGE: browser must call API via Traefik, not localhost:8000
+        - VITE_API_URL=http://api.localhost:8088
         - NODE_ENV=development
+    environment:
+      #  Helps clarity if container also has it (though build-time is what matters)
+      - VITE_API_URL=http://api.localhost:8088
 
   playwright:
     build:
       context: ./frontend
       dockerfile: Dockerfile.playwright
       args:
+        #  Playwright runs *inside Docker*, so internal URL is correct
         - VITE_API_URL=http://backend:8000
         - NODE_ENV=production
     ipc: host
@@ -116,6 +133,7 @@ services:
     env_file:
       - .env
     environment:
+      #  same logic: internal network
       - VITE_API_URL=http://backend:8000
       - MAILCATCHER_HOST=http://mailcatcher:1080
       # For the reports when run locally
